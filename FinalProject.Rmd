@@ -1,0 +1,66 @@
+---
+title: "Final Project"
+author: "Eric Chen"
+date: "2024-07-30"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# Load necessary libraries
+library(tidyverse) 
+library(tidyr)
+
+# Read the data
+metadata <- read.csv("QBS103_GSE157103_series_matrix.csv")
+gene_expression <- read.csv("QBS103_GSE157103_genes.csv")
+
+# Clean whitespace in metadata
+metadata <- metadata %>%
+  mutate(across(everything(), ~ trimws(.)))
+
+# Convert gene expression data to long format
+gene_expression_long <- gene_expression %>%
+  pivot_longer(cols = -X, names_to = "Sample", values_to = "Expression") %>%
+  rename(Gene = X)
+
+# Merge the data
+merged_data <- left_join(gene_expression_long, metadata, by = c("Sample" = "participant_id"))
+
+# Select a gene for analysis
+selected_gene <- "A2M"
+plot_data <- merged_data %>% filter(Gene == selected_gene)
+
+# Convert continuous covariate (charlson_score) to numeric, handle non-numeric values
+plot_data$charlson_score <- as.numeric(plot_data$charlson_score)
+
+# Generate a histogram for gene expression
+ggplot(plot_data, aes(x = Expression)) +
+  geom_histogram(binwidth = 0.1, fill = "blue", color = "black") +  # Adjust binwidth
+  labs(title = paste("Histogram of", selected_gene, "Expression"), x = paste(selected_gene, "Expression"), y = "Frequency")
+
+# Generate a scatter plot for gene expression and continuous covariate (charlson_score)
+# Remove NA values from charlson_score
+plot_data_scatter <- plot_data %>% filter(!is.na(charlson_score))
+
+ggplot(plot_data_scatter, aes(x = charlson_score, y = Expression)) +
+  geom_point() +
+  geom_smooth(method = "loess", color = "red") +  # Adding a smoothed line
+  labs(title = paste("Scatterplot of", selected_gene, "Expression and Charlson Score"), x = "Charlson Score", y = paste(selected_gene, "Expression"))
+
+# Generate a boxplot of gene expression separated by both categorical covariates (sex and mechanical_ventilation)
+# Handle 'unknown' value in sex variable
+plot_data <- plot_data %>% mutate(sex = ifelse(sex == "unknown", "Unknown", sex))
+
+ggplot(plot_data, aes(x = sex, y = Expression, fill = mechanical_ventilation)) +
+  geom_boxplot() +
+  labs(title = paste("Boxplot of", selected_gene, "Expression by Sex and Mechanical Ventilation"), x = "Sex", y = paste(selected_gene, "Expression")) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for better readability
+
+
+```
