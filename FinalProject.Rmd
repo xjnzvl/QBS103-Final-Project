@@ -11,6 +11,7 @@ output:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+#1
 ```{r}
 # Load necessary libraries
 library(tidyverse) 
@@ -36,22 +37,22 @@ merged_data <- left_join(gene_expression_long, metadata, by = c("Sample" = "part
 selected_gene <- "A2M"
 plot_data <- merged_data %>% filter(Gene == selected_gene)
 
-# Convert continuous covariate (charlson_score) to numeric, handle non-numeric values
-plot_data$charlson_score <- as.numeric(plot_data$charlson_score)
+# Convert continuous covariate (age) to numeric, handle non-numeric values
+plot_data$age <- as.numeric(plot_data$age)
 
 # Generate a histogram for gene expression
 ggplot(plot_data, aes(x = Expression)) +
   geom_histogram(binwidth = 0.1, fill = "blue", color = "black") +  # Adjust binwidth
   labs(title = paste("Histogram of", selected_gene, "Expression"), x = paste(selected_gene, "Expression"), y = "Frequency")
 
-# Generate a scatter plot for gene expression and continuous covariate (charlson_score)
-# Remove NA values from charlson_score
-plot_data_scatter <- plot_data %>% filter(!is.na(charlson_score))
+# Generate a scatter plot for gene expression and continuous covariate (age)
+# Remove NA values from age
+plot_data_scatter <- plot_data %>% filter(!is.na(age))
 
-ggplot(plot_data_scatter, aes(x = charlson_score, y = Expression)) +
+ggplot(plot_data_scatter, aes(x = age, y = Expression)) +
   geom_point() +
   geom_smooth(method = "loess", color = "red") +  # Adding a smoothed line
-  labs(title = paste("Scatterplot of", selected_gene, "Expression and Charlson Score"), x = "Charlson Score", y = paste(selected_gene, "Expression"))
+  labs(title = paste("Scatterplot of", selected_gene, "Expression and Age"), x = "Age", y = paste(selected_gene, "Expression"))
 
 # Generate a boxplot of gene expression separated by both categorical covariates (sex and mechanical_ventilation)
 # Handle 'unknown' value in sex variable
@@ -61,6 +62,58 @@ ggplot(plot_data, aes(x = sex, y = Expression, fill = mechanical_ventilation)) +
   geom_boxplot() +
   labs(title = paste("Boxplot of", selected_gene, "Expression by Sex and Mechanical Ventilation"), x = "Sex", y = paste(selected_gene, "Expression")) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for better readability
+
+
+```
+#2
+```{r}
+# Function to create plots
+create_plots <- function(data, genes, continuous_covariate, categorical_covariate1, categorical_covariate2) {
+  for (gene in genes) {
+    plot_data <- data %>% filter(Gene == gene)
+    
+    # Convert continuous covariate to numeric, handle non-numeric values
+    plot_data[[continuous_covariate]] <- as.numeric(plot_data[[continuous_covariate]])
+    
+    # Histogram for gene expression
+    print(
+      ggplot(plot_data, aes(x = Expression)) +
+        geom_histogram(binwidth = 0.1, fill = "blue", color = "black") +
+        labs(title = paste("Histogram of", gene, "Expression"), x = paste(gene, "Expression"), y = "Frequency")
+    )
+    
+    # Scatter plot for gene expression and continuous covariate
+    plot_data_scatter <- plot_data %>% filter(!is.na(plot_data[[continuous_covariate]]))
+    
+    print(
+      ggplot(plot_data_scatter, aes_string(x = continuous_covariate, y = "Expression")) +
+        geom_point() +
+        geom_smooth(method = "loess", color = "red") +
+        labs(title = paste("Scatterplot of", gene, "Expression and", continuous_covariate), x = continuous_covariate, y = paste(gene, "Expression"))
+    )
+    
+    # Boxplot of gene expression separated by both categorical covariates
+    plot_data <- plot_data %>% mutate(!!categorical_covariate1 := ifelse(get(categorical_covariate1) == "unknown", "Unknown", get(categorical_covariate1)))
+    
+    print(
+      ggplot(plot_data, aes_string(x = categorical_covariate1, y = "Expression", fill = categorical_covariate2)) +
+        geom_boxplot() +
+        labs(title = paste("Boxplot of", gene, "Expression by", categorical_covariate1, "and", categorical_covariate2), x = categorical_covariate1, y = paste(gene, "Expression")) +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1))
+    )
+  }
+}
+
+# Select additional genes
+additional_genes <- c("A2M", "AARSD1", "ABHD2")
+
+# Generate figures using the function
+create_plots(data = merged_data, genes = additional_genes, continuous_covariate = "age", categorical_covariate1 = "sex", categorical_covariate2 = "mechanical_ventilation")
+
+
+  
+
+
 
 
 ```
