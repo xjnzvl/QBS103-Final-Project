@@ -21,10 +21,6 @@ library(tidyr)
 metadata <- read.csv("QBS103_GSE157103_series_matrix.csv")
 gene_expression <- read.csv("QBS103_GSE157103_genes.csv")
 
-# Clean whitespace in metadata
-metadata <- metadata %>%
-  mutate(across(everything(), ~ trimws(.)))
-
 # Convert gene expression data to long format
 gene_expression_long <- gene_expression %>%
   pivot_longer(cols = -X, names_to = "Sample", values_to = "Expression") %>%
@@ -66,7 +62,7 @@ ggplot(plot_data, aes(x = sex, y = Expression, fill = mechanical_ventilation)) +
 
 ```
 #2
-```{r}
+```{r,warning = FALSE}
 # Function to create plots
 create_plots <- function(data, genes, continuous_covariate, categorical_covariate1, categorical_covariate2) {
   for (gene in genes) {
@@ -115,5 +111,230 @@ create_plots(data = merged_data, genes = additional_genes, continuous_covariate 
 
 
 
+
+```
+
+#Final
+```{r message = F, warning = F}
+# Load necessary libraries
+library(tidyverse)
+library(tidyr)
+library(pheatmap)
+
+# Read the data
+metadata <- read.csv("QBS103_GSE157103_series_matrix.csv")
+gene_expression <- read.csv("QBS103_GSE157103_genes.csv")
+
+# Convert gene expression data to long format
+gene_expression_long <- gene_expression %>%
+  pivot_longer(cols = -X, names_to = "Sample", values_to = "Expression") %>%
+  rename(Gene = X)
+
+# Merge the data
+merged_data <- left_join(gene_expression_long, metadata, by = c("Sample" = "participant_id"))
+
+# Select a gene for analysis
+selected_gene <- "A2M"
+plot_data <- merged_data %>% filter(Gene == selected_gene)
+
+# Convert continuous covariate (age) to numeric, handle non-numeric values
+plot_data$age <- as.numeric(plot_data$age)
+
+# Generate a histogram for gene expression
+hist_plot <- ggplot(plot_data, aes(x = Expression)) +
+  geom_histogram(binwidth = 0.1, fill = "blue", color = "black") +
+  labs(title = paste("Histogram of", selected_gene, "Expression"), x = paste(selected_gene, "Expression"), y = "Frequency")
+
+# Save the histogram
+ggsave("histogram_a2m_expression.pdf", plot = hist_plot)
+
+# Generate a scatter plot for gene expression and continuous covariate (age)
+# Remove NA values from age
+plot_data_scatter <- plot_data %>% filter(!is.na(age))
+
+scatter_plot <- ggplot(plot_data_scatter, aes(x = age, y = Expression)) +
+  geom_point() +
+  geom_smooth(method = "loess", color = "red") +  # Adding a smoothed line
+  labs(title = paste("Scatterplot of", selected_gene, "Expression and Age"), x = "Age", y = paste(selected_gene, "Expression"))
+
+# Save the scatter plot
+ggsave("scatterplot_a2m_age.pdf", plot = scatter_plot)
+
+# Generate a boxplot of gene expression separated by both categorical covariates (sex and mechanical_ventilation)
+plot_data <- plot_data %>% mutate(sex = ifelse(sex == "unknown", "Unknown", sex))
+
+box_plot <- ggplot(plot_data, aes(x = sex, y = Expression, fill = mechanical_ventilation)) +
+  geom_boxplot() +
+  labs(title = paste("Boxplot of", selected_gene, "Expression by Sex and Mechanical Ventilation"), x = "Sex", y = paste(selected_gene, "Expression")) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Save the boxplot
+ggsave("boxplot_a2m_sex_ventilation.pdf", plot = box_plot)
+
+
+
+
+
+
+```
+#Generate a summary table
+```{r}
+
+library(knitr)
+library(kableExtra)
+
+# Clean and Convert the Data
+metadata_clean <- metadata %>%
+  mutate(
+    age = as.numeric(gsub("[^0-9]", "", age)), 
+    mechanical_ventilation = trimws(mechanical_ventilation),  
+    sex = trimws(sex),
+    ferritin = as.numeric(replace(ferritin.ng.ml., ferritin.ng.ml. == "unknown", NA)),  
+    crp = as.numeric(replace(crp.mg.l., crp.mg.l. == "unknown", NA)), 
+    disease_status = factor(disease_status)
+  ) %>%
+  filter(sex != "unknown")  
+
+# Split data by disease status
+covid_data <- metadata_clean %>% filter(disease_status == "disease state: COVID-19")
+non_covid_data <- metadata_clean %>% filter(disease_status == "disease state: non-COVID-19")
+
+# Continuous Variables: mean (sd)
+covid_age_mean_sd <- paste0(round(mean(covid_data$age, na.rm = TRUE), 1), " (", round(sd(covid_data$age, na.rm = TRUE), 1), ")")
+covid_ferritin_mean_sd <- paste0(round(mean(covid_data$ferritin, na.rm = TRUE), 1), " (", round(sd(covid_data$ferritin, na.rm = TRUE), 1), ")")
+covid_crp_mean_sd <- paste0(round(mean(covid_data$crp, na.rm = TRUE), 1), " (", round(sd(covid_data$crp, na.rm = TRUE), 1), ")")
+
+non_covid_age_mean_sd <- paste0(round(mean(non_covid_data$age, na.rm = TRUE), 1), " (", round(sd(non_covid_data$age, na.rm = TRUE), 1), ")")
+non_covid_ferritin_mean_sd <- paste0(round(mean(non_covid_data$ferritin, na.rm = TRUE), 1), " (", round(sd(non_covid_data$ferritin, na.rm = TRUE), 1), ")")
+non_covid_crp_mean_sd <- paste0(round(mean(non_covid_data$crp, na.rm = TRUE), 1), " (", round(sd(non_covid_data$crp, na.rm = TRUE), 1), ")")
+
+# Categorical Variables: n (%)
+covid_sex_counts <- covid_data %>%
+  count(sex) %>%
+  mutate(perc = n / sum(n) * 100,
+         result = paste0(n, " (", round(perc, 1), "%)"))
+
+covid_mechanical_vent_counts <- covid_data %>%
+  count(mechanical_ventilation) %>%
+  mutate(perc = n / sum(n) * 100,
+         result = paste0(n, " (", round(perc, 1), "%)"))
+
+non_covid_sex_counts <- non_covid_data %>%
+  count(sex) %>%
+  mutate(perc = n / sum(n) * 100,
+         result = paste0(n, " (", round(perc, 1), "%)"))
+
+non_covid_mechanical_vent_counts <- non_covid_data %>%
+  count(mechanical_ventilation) %>%
+  mutate(perc = n / sum(n) * 100,
+         result = paste0(n, " (", round(perc, 1), "%)"))
+
+# Combine all results into a final table
+final_table <- data.frame(
+  Variable = c("Age mean (sd)", "Ferritin (ng/ml)", "CRP (mg/L)", 
+               "Female n (%)", "Male n (%)", 
+               "Mechanical Ventilation (Yes) n (%)", "Mechanical Ventilation (No) n (%)"),
+  
+  COVID_19 = c(covid_age_mean_sd, covid_ferritin_mean_sd, covid_crp_mean_sd, 
+               covid_sex_counts$result[covid_sex_counts$sex == "female"],
+               covid_sex_counts$result[covid_sex_counts$sex == "male"],
+               covid_mechanical_vent_counts$result[covid_mechanical_vent_counts$mechanical_ventilation == "yes"],
+               covid_mechanical_vent_counts$result[covid_mechanical_vent_counts$mechanical_ventilation == "no"]),
+  
+  Non_COVID_19 = c(non_covid_age_mean_sd, non_covid_ferritin_mean_sd, non_covid_crp_mean_sd, 
+                   non_covid_sex_counts$result[non_covid_sex_counts$sex == "female"],
+                   non_covid_sex_counts$result[non_covid_sex_counts$sex == "male"],
+                   non_covid_mechanical_vent_counts$result[non_covid_mechanical_vent_counts$mechanical_ventilation == "yes"],
+                   non_covid_mechanical_vent_counts$result[non_covid_mechanical_vent_counts$mechanical_ventilation == "no"])
+)
+
+
+print(final_table)
+
+
+# Define the table columns
+col_names <- c("Variable", "COVID-19 (n = 100)", "Non-COVID-19 (n = 25)")
+
+# Print the table
+tab <- kable(x = final_table, caption = 'Summary Table by Disease Status',
+             format = 'latex', booktabs = T,
+             col.names = col_names,
+             align = c('l','r','r'), escape = T) %>%
+  add_indent(positions = c(4, 5, 6, 7), level_of_indent = 1)  # Adjusted positions
+
+tab
+
+
+```
+#Generate the heatmap and selected new plot type
+```{r message = F, warning = F}
+
+# Read the data
+metadata <- read.csv("QBS103_GSE157103_series_matrix.csv")
+gene_expression <- read.csv("QBS103_GSE157103_genes.csv")
+
+# Convert gene expression data to long format
+gene_expression_long <- gene_expression %>%
+  pivot_longer(cols = -X, names_to = "Sample", values_to = "Expression") %>%
+  rename(Gene = X)
+
+# Merge the gene expression data with metadata
+merged_data <- left_join(gene_expression_long, metadata, by = c("Sample" = "participant_id"))
+
+# Check for duplicates and aggregate by taking the mean of duplicates
+heatmap_data <- merged_data %>%
+  group_by(Gene, Sample) %>%
+  summarize(Expression = mean(Expression, na.rm = TRUE)) %>%
+  ungroup()
+
+# Convert to wide format 
+heatmap_data_wide <- heatmap_data %>%
+  pivot_wider(names_from = Sample, values_from = Expression) %>%
+  column_to_rownames(var = "Gene")
+
+# Calculate variance for each gene and select the top 10 most variable genes
+variance <- apply(heatmap_data_wide, MARGIN = 1, FUN = var)
+top_genes <- names(sort(variance, decreasing = TRUE))[1:10]
+heatmap_data_top <- heatmap_data_wide[top_genes,]
+
+# Log2 transform the data to normalize the expression values
+log2_heatmap_data <- log2(heatmap_data_top + 1)  
+
+# Prepare annotation data for tracking bars
+annotation_data <- metadata %>%
+  select(participant_id, sex, mechanical_ventilation) %>%
+  filter(participant_id %in% colnames(log2_heatmap_data)) %>%
+  column_to_rownames(var = "participant_id")
+
+# Define the annotation colors
+annotation_colors <- list(
+  sex = c("male" = "blue", "female" = "pink", "unknown" = "grey"),
+  mechanical_ventilation = c("yes" = "red", "no" = "green")  
+)
+
+#Remove whitespace
+annotation_data$sex <- trimws(annotation_data$sex)
+annotation_data$mechanical_ventilation <- trimws(annotation_data$mechanical_ventilation)
+
+# Save the heatmap
+pdf("heatmap_top10_genes.pdf",width = 20, height = 20)
+pheatmap(log2_heatmap_data,
+         clustering_distance_cols = 'euclidean',
+         clustering_distance_rows = 'euclidean',
+         annotation_col = annotation_data,
+         annotation_colors = annotation_colors,
+         main = "Heatmap of Top 10 Genes with Clustering and Annotations")
+
+# Generate a density plot to compare the distribution of A2M expression by sex and mechanical ventilation
+density_plot <- ggplot(plot_data, aes(x = Expression, fill = sex)) +
+  geom_density(alpha = 0.5) +
+  facet_wrap(~ mechanical_ventilation) +
+  labs(title = paste("Density Plot of", selected_gene, "Expression by Sex and Mechanical Ventilation"),
+       x = paste(selected_gene, "Expression"),
+       y = "Density") +
+  theme_minimal()
+
+# Save the density plot
+ggsave("density_plot_a2m_expression.pdf", plot = density_plot)
 
 ```
